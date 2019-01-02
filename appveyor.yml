@@ -14,11 +14,13 @@ after_build:
   - cmd: appveyor PushArtifact TrainsFiveM-%VERSION_NAME%.zip
 deploy:
   - provider: GitHub
-    release: "TrainsFiveM-$(VERSION_NAME)"
+    release: "Trains FiveM $(VERSION_NAME)"
     artifact: TrainsFiveM-$(VERSION_NAME).zip
     draft: false
     prerelease: false
     auth_token: $(github_auth)
+    tag: $(VERSION_NAME)
+    force_update: true
     on:
       APPVEYOR_REPO_TAG: true
     description: "Trains FiveM build version $(VERSION_NAME)."
