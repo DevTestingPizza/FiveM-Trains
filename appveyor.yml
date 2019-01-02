@@ -7,6 +7,7 @@ build:
   project: TrainsFiveM.sln
   verbosity: minimal
 after_build:
+  - cmd: copy *.md build\
   - cmd: if %APPVEYOR_REPO_TAG%==true (appveyor SetVariable -Name VERSION_NAME -Value %APPVEYOR_REPO_TAG_NAME%) else (appveyor SetVariable -Name VERSION_NAME -Value build)
   - cmd: ren build Trains-FiveM-release
   - cmd: 7z a TrainsFiveM-%VERSION_NAME%.zip -r Trains-FiveM-release\
