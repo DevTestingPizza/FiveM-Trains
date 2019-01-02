@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -80,9 +80,9 @@ namespace TrainsClient
         /// </summary>
         public Main()
         {
-            //EventHandlers.Add("playerSpawned", new Action(Spawn));
-            //Spawn();
-            //EventHandlers.Add(GetCurrentResourceName() + ":GetTrainNetworkHandle", new Action<List<dynamic>>(SetTrain));
+            EventHandlers.Add("playerSpawned", new Action(Spawn));
+            Spawn();
+            EventHandlers.Add(GetCurrentResourceName() + ":GetTrainNetworkHandle", new Action<List<dynamic>>(SetTrain));
             Tick += ManageTrainStops;
         }
 
