@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -97,22 +97,51 @@ namespace TrainsClient
                 {
                     if (IsVehicleModel(train, (uint)GetHashKey("METROTRAIN")))
                     {
-                        if (GetEntitySpeed(train) < 1f)
-                        {
-                            for (var i = 0; i < GetNumberOfVehicleDoors(train); i++)
-                            {
-                                SetVehicleDoorOpen(train, i, false, false);
-                                SetVehicleDoorOpen(GetTrainCarriage(train, 1), i, false, false);
-                            }
-                        }
-                        else
-                        {
-                            for (var i = 0; i < GetNumberOfVehicleDoors(train); i++)
-                            {
-                                SetVehicleDoorShut(train, i, false);
-                                SetVehicleDoorShut(GetTrainCarriage(train, 1), i, false);
-                            }
-                        }
+                        //if (GetEntitySpeed(train) < 1f)
+                        //{
+                        //    // Get all doors from main train and it's carriage.
+                        //    var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
+                        //    doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
+
+                        //    if (doors.Any(a => !a.IsFullyOpen))
+                        //    {
+                        //        // Open doors.
+                        //        doors.ForEach((a) => a.Open(false, false));
+                        //        while (!doors.All((a) => a.IsFullyOpen))
+                        //        {
+                        //            await Delay(0);
+                        //        }
+
+                        //        // Remove doors.
+                        //        doors.ForEach((a) => a.Break(false));
+                        //    }
+
+                        //}
+                        //else
+                        //{
+                        //    // Get all doors from main train and it's carriage.
+                        //    var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
+                        //    doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
+
+                        //    if (doors.Any(a => a.IsOpen))
+                        //    {
+                        //        // Restore the doors by fixing the train.
+                        //        SetVehicleFixed(train);
+                        //        SetVehicleFixed(GetTrainCarriage(train, 1));
+
+                        //        // Set the doors back open (instantly)
+                        //        doors.ForEach(a => a.Open(false, true));
+
+                        //        // Close the doors (normal animation speed).
+                        //        doors.ForEach(a => a.Close(false));
+
+                        //        // Wait for the doors to be closed.
+                        //        while (doors.Any(a => a.IsOpen))
+                        //        {
+                        //            await Delay(0);
+                        //        }
+                        //    }
+                        //}
 
 
                         Vector3 pos = GetEntityCoords(train, false);
@@ -134,14 +163,45 @@ namespace TrainsClient
             stoppingTrains.Add(train);
             SetTrainCruiseSpeed(train, 0f);
 
+            // Get all doors from main train and it's carriage.
+            var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
+            doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
+
+            if (doors.Any(a => !a.IsFullyOpen))
+            {
+                // Open doors.
+                doors.ForEach((a) => a.Open(false, false));
+                while (!doors.All((a) => a.IsFullyOpen))
+                {
+                    await Delay(0);
+                }
+
+                // Remove doors.
+                doors.ForEach((a) => a.Break(false));
+            }
+
             await Delay(20000);
 
+            // Restore the doors by fixing the train.
+            SetVehicleFixed(train);
+            SetVehicleFixed(GetTrainCarriage(train, 1));
+
+            // Set the doors back open (instantly)
+            doors.ForEach(a => a.Open(false, true));
+
+            // Close the doors (normal animation speed).
+            doors.ForEach(a => a.Close(false));
+
+            // Wait for the doors to be closed.
+            while (doors.Any(a => a.IsOpen))
+            {
+                await Delay(0);
+            }
+
             SetTrainCruiseSpeed(train, 8f);
-            //while (GetEntitySpeed(train) < 6f)
-            //{
-            //    await Delay(100);
-            //}
+
             await Delay(5000);
+
             stoppingTrains.Remove(train);
         }
 
@@ -169,21 +229,6 @@ namespace TrainsClient
                         TrainHandles.Add(NetToVeh((int)nh));
                     }
                 }
-                //if (NetworkDoesNetworkIdExist(netHandle1))
-                //{
-                //    TrainNetHandles[0] = netHandle1;
-                //    TrainHandles[0] = NetToVeh(netHandle1);
-                //}
-                //if (NetworkDoesNetworkIdExist(netHandle2))
-                //{
-                //    TrainNetHandles[1] = netHandle2;
-                //    TrainHandles[1] = NetToVeh(netHandle2);
-                //}
-                //if (NetworkDoesNetworkIdExist(netHandle3))
-                //{
-                //    TrainNetHandles[2] = netHandle3;
-                //    TrainHandles[2] = NetToVeh(netHandle3);
-                //}
 
 
                 //{
@@ -245,8 +290,8 @@ namespace TrainsClient
                 }
 
                 //speedv
-                SetRandomTrains(false);
-                DeleteAllTrains();
+                //SetRandomTrains(false);
+                //DeleteAllTrains();
                 if (NetworkIsHost())
                 {
                     bool direction = new Random().Next(0, 1) == 1;
@@ -323,6 +368,7 @@ namespace TrainsClient
                         EndTextCommandSetBlipName(blip);
                     }
                 }
+
 
 
                 foreach (string t in TrainModels)
