@@ -1,0 +1,22 @@
+pull_requests:
+  do_not_increment_build_number: false
+image: Visual Studio 2017
+configuration: Release
+build:
+  parallel: true
+  project: TrainsFiveM.sln
+  verbosity: minimal
+after_build:
+  - cmd: if %APPVEYOR_REPO_TAG%==true (appveyor SetVariable -Name VERSION_NAME -Value %APPVEYOR_REPO_TAG_NAME%) else (appveyor SetVariable -Name VERSION_NAME -Value beta)
+  - cmd: 7z a TrainsFiveM-%VERSION_NAME%.zip -r build\
+  - cmd: appveyor PushArtifact TrainsFiveM-%VERSION_NAME%.zip
+deploy:
+  - provider: GitHub
+    release: "TrainsFiveM-$(VERSION_NAME)"
+    artifact: TrainsFiveM-$(VERSION_NAME).zip
+    draft: false
+    prerelease: false
+    auth_token: $(github_auth)
+    on:
+      APPVEYOR_REPO_TAG: true
+    description: "Trains FiveM build version $(VERSION_NAME)."
