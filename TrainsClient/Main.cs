@@ -97,61 +97,18 @@ namespace TrainsClient
                 {
                     if (IsVehicleModel(train, (uint)GetHashKey("METROTRAIN")))
                     {
-                        //if (GetEntitySpeed(train) < 1f)
-                        //{
-                        //    // Get all doors from main train and it's carriage.
-                        //    var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
-                        //    doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
-
-                        //    if (doors.Any(a => !a.IsFullyOpen))
-                        //    {
-                        //        // Open doors.
-                        //        doors.ForEach((a) => a.Open(false, false));
-                        //        while (!doors.All((a) => a.IsFullyOpen))
-                        //        {
-                        //            await Delay(0);
-                        //        }
-
-                        //        // Remove doors.
-                        //        doors.ForEach((a) => a.Break(false));
-                        //    }
-
-                        //}
-                        //else
-                        //{
-                        //    // Get all doors from main train and it's carriage.
-                        //    var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
-                        //    doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
-
-                        //    if (doors.Any(a => a.IsOpen))
-                        //    {
-                        //        // Restore the doors by fixing the train.
-                        //        SetVehicleFixed(train);
-                        //        SetVehicleFixed(GetTrainCarriage(train, 1));
-
-                        //        // Set the doors back open (instantly)
-                        //        doors.ForEach(a => a.Open(false, true));
-
-                        //        // Close the doors (normal animation speed).
-                        //        doors.ForEach(a => a.Close(false));
-
-                        //        // Wait for the doors to be closed.
-                        //        while (doors.Any(a => a.IsOpen))
-                        //        {
-                        //            await Delay(0);
-                        //        }
-                        //    }
-                        //}
-
-
                         Vector3 pos = GetEntityCoords(train, false);
-                        if ((stoppingTrains.Count > 0 && !stoppingTrains.Contains(train)) || stoppingTrains.Count < 1)
+                        if (pos != null)
                         {
-                            if (TrainStops.Any((stop) => stop.DistanceToSquared(pos) < 10f))
+                            if ((stoppingTrains.Count > 0 && !stoppingTrains.Contains(train)) || stoppingTrains.Count < 1)
                             {
-                                StopTrain(train);
+                                if (TrainStops.Any((stop) => stop.DistanceToSquared(pos) < 10f))
+                                {
+                                    StopTrain(train);
+                                }
                             }
                         }
+
                     }
                 }
             }
@@ -163,46 +120,86 @@ namespace TrainsClient
             stoppingTrains.Add(train);
             SetTrainCruiseSpeed(train, 0f);
 
-            // Get all doors from main train and it's carriage.
-            var doors = ((Vehicle)Vehicle.FromHandle(train)).Doors.GetAll().ToList();
-            doors.AddRange(((Vehicle)Vehicle.FromHandle(GetTrainCarriage(train, 1))).Doors.GetAll().ToList());
+            var trainCarriage = GetTrainCarriage(train, 1);
 
-            if (doors.Any(a => !a.IsFullyOpen))
+            Vehicle mainTrain = (Vehicle)Vehicle.FromHandle(train);
+            Vehicle cariageTrain = (Vehicle)Vehicle.FromHandle(trainCarriage);
+
+            if (mainTrain != null && cariageTrain != null)
             {
+                // Get all doors from main train and it's carriage.
+                var doors = mainTrain.Doors.GetAll().ToList();
+                doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+
                 // Open doors.
-                doors.ForEach((a) => a.Open(false, false));
-                while (!doors.All((a) => a.IsFullyOpen))
+                doors.ForEach((a) => SetVehicleDoorOpen(a.Vehicle.Handle, (int)a.Index, false, false)); //)/*a.Open(true, false)*/);
+
+                await Delay(300);
+
+                // Wait for all doors to be fully open.
+                while (doors.Any((a) => !a.IsFullyOpen))
                 {
                     await Delay(0);
                 }
 
                 // Remove doors.
                 doors.ForEach((a) => a.Break(false));
-            }
 
-            await Delay(20000);
+                await Delay(20000);
 
-            // Restore the doors by fixing the train.
-            SetVehicleFixed(train);
-            SetVehicleFixed(GetTrainCarriage(train, 1));
+                // Restore the doors by fixing the train.
+                SetVehicleFixed(train);
+                SetVehicleFixed(trainCarriage);
 
-            // Set the doors back open (instantly)
-            doors.ForEach(a => a.Open(false, true));
+                // Set the doors back open (instantly)
+                doors.ForEach(a => a.Open(false, true));
 
-            // Close the doors (normal animation speed).
-            doors.ForEach(a => a.Close(false));
+                // Close the doors (normal animation speed).
+                //doors.ForEach(a => a.Close(false));
+                doors.ForEach(d => SetVehicleDoorShut(d.Vehicle.Handle, (int)d.Index, false));
 
-            // Wait for the doors to be closed.
-            while (doors.Any(a => a.IsOpen))
-            {
-                await Delay(0);
+                //await Delay(100);
+
+                // Wait for the doors to be closed.
+                while (doors.Any(a => a.IsOpen))
+                {
+                    await Delay(0);
+                }
             }
 
             SetTrainCruiseSpeed(train, 8f);
 
-            await Delay(5000);
+            int timer = GetGameTimer();
+
+            while (GetGameTimer() - timer < 10000)
+            {
+                await Delay(0);
+
+                if (mainTrain != null && cariageTrain != null)
+                {
+                    var doors = mainTrain.Doors.GetAll().ToList();
+                    doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+
+                    doors.ForEach(d => d.Close(true));
+                }
+            }
 
             stoppingTrains.Remove(train);
+
+            while (!stoppingTrains.Contains(train))
+            {
+                await Delay(0);
+
+                if (mainTrain != null && cariageTrain != null)
+                {
+                    var doors = mainTrain.Doors.GetAll().ToList();
+                    doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+
+                    doors.ForEach(d => d.Close(true));
+                }
+            }
+
+
         }
 
         /// <summary>
