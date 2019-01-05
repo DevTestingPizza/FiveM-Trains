@@ -10,13 +10,52 @@ namespace TrainsClient
 {
     public class Main : BaseScript
     {
-        private bool hasSpawned = false;
         private bool justSetup = false;
 
-        private List<int> TrainHandles { get; set; } = new List<int>() { 0, 0, 0, 0 };
-        //private List<int> TrainNetHandles { get; set; } = new List<int>();
-        //private int[] TrainNetHandles { get; set; } = new int[3] { 0, 0, 0 };
-        //private int[] TrainHandles { get; set; } = new int[3] { 0, 0, 0 };
+        private bool CreateBlips => (GetConvar("create_train_blips", "true") ?? "true").ToLower() == "true";
+
+        private List<int> TrainHandles
+        {
+            get
+            {
+                List<int> trains = new List<int>();
+                int entity = 0;
+                int findHandle = FindFirstVehicle(ref entity);
+                if (DoesEntityExist(entity) && IsThisModelATrain((uint)GetEntityModel(entity)))
+                {
+                    if ((uint)GetEntityModel(entity) == (uint)GetHashKey("METROTRAIN"))
+                    {
+                        if (GetTrainCarriage(entity, 1) != 0)
+                        {
+                            trains.Add(entity);
+                        }
+                    }
+                    else if ((uint)GetEntityModel(entity) == (uint)GetHashKey("FREIGHT"))
+                    {
+                        trains.Add(entity);
+                    }
+                }
+                while (FindNextVehicle(findHandle, ref entity))
+                {
+                    if (DoesEntityExist(entity) && IsThisModelATrain((uint)GetEntityModel(entity)))
+                    {
+                        if ((uint)GetEntityModel(entity) == (uint)GetHashKey("METROTRAIN"))
+                        {
+                            if (GetTrainCarriage(entity, 1) != 0)
+                            {
+                                trains.Add(entity);
+                            }
+                        }
+                        else if ((uint)GetEntityModel(entity) == (uint)GetHashKey("FREIGHT"))
+                        {
+                            trains.Add(entity);
+                        }
+                    }
+                }
+                EndFindVehicle(findHandle);
+                return trains;
+            }
+        }
 
         private readonly List<string> TrainModels = new List<string>()
         {
@@ -80,9 +119,8 @@ namespace TrainsClient
         /// </summary>
         public Main()
         {
-            EventHandlers.Add("playerSpawned", new Action(Spawn));
-            Spawn();
-            EventHandlers.Add(GetCurrentResourceName() + ":GetTrainNetworkHandle", new Action<List<dynamic>>(SetTrain));
+            SetTrain();
+            EventHandlers.Add(GetCurrentResourceName() + ":GetTrainNetworkHandle", new Action(SetTrain));
             Tick += ManageTrainStops;
         }
 
@@ -90,7 +128,6 @@ namespace TrainsClient
 
         private async Task ManageTrainStops()
         {
-            //SetRandomTrains(true);
             foreach (var train in TrainHandles)
             {
                 if (DoesEntityExist(train))
@@ -108,7 +145,6 @@ namespace TrainsClient
                                 }
                             }
                         }
-
                     }
                 }
             }
@@ -117,96 +153,85 @@ namespace TrainsClient
 
         private async void StopTrain(int train)
         {
-            stoppingTrains.Add(train);
-            SetTrainCruiseSpeed(train, 0f);
-
-            var trainCarriage = GetTrainCarriage(train, 1);
-
-            Vehicle mainTrain = (Vehicle)Vehicle.FromHandle(train);
-            Vehicle cariageTrain = (Vehicle)Vehicle.FromHandle(trainCarriage);
-
-            if (mainTrain != null && cariageTrain != null)
+            if (NetworkHasControlOfEntity(train) && NetworkHasControlOfEntity(GetTrainCarriage(train, 1)))
             {
-                // Get all doors from main train and it's carriage.
-                var doors = mainTrain.Doors.GetAll().ToList();
-                doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+                stoppingTrains.Add(train);
+                SetTrainCruiseSpeed(train, 0f);
 
-                // Open doors.
-                doors.ForEach((a) => SetVehicleDoorOpen(a.Vehicle.Handle, (int)a.Index, false, false)); //)/*a.Open(true, false)*/);
+                var trainCarriage = GetTrainCarriage(train, 1);
 
-                await Delay(300);
-
-                // Wait for all doors to be fully open.
-                while (doors.Any((a) => !a.IsFullyOpen))
-                {
-                    await Delay(0);
-                }
-
-                // Remove doors.
-                doors.ForEach((a) => a.Break(false));
-
-                await Delay(20000);
-
-                // Restore the doors by fixing the train.
-                SetVehicleFixed(train);
-                SetVehicleFixed(trainCarriage);
-
-                // Set the doors back open (instantly)
-                doors.ForEach(a => a.Open(false, true));
-
-                // Close the doors (normal animation speed).
-                //doors.ForEach(a => a.Close(false));
-                doors.ForEach(d => SetVehicleDoorShut(d.Vehicle.Handle, (int)d.Index, false));
-
-                //await Delay(100);
-
-                // Wait for the doors to be closed.
-                while (doors.Any(a => a.IsOpen))
-                {
-                    await Delay(0);
-                }
-            }
-
-            SetTrainCruiseSpeed(train, 8f);
-
-            int timer = GetGameTimer();
-
-            while (GetGameTimer() - timer < 10000)
-            {
-                await Delay(0);
+                Vehicle mainTrain = (Vehicle)Vehicle.FromHandle(train);
+                Vehicle cariageTrain = (Vehicle)Vehicle.FromHandle(trainCarriage);
 
                 if (mainTrain != null && cariageTrain != null)
                 {
+                    // Get all doors from main train and it's carriage.
                     var doors = mainTrain.Doors.GetAll().ToList();
                     doors.AddRange(cariageTrain.Doors.GetAll().ToList());
 
-                    doors.ForEach(d => d.Close(true));
+                    // doors to keep closed. (the inverse of the other thing below)
+                    var doorsToClose = doors.Where((d) => (GetTrainCarriage(d.Vehicle.Handle, 1) != 0 ? ((float)d.Index % 2 != 0) : ((float)d.Index % 2 == 0))).ToList();
+
+                    // Filter the list to only make train doors open on the side of the platform, and the others remain closed.
+                    doors = doors.Where((d) => (GetTrainCarriage(d.Vehicle.Handle, 1) == 0 ? ((float)d.Index % 2 != 0) : ((float)d.Index % 2 == 0))).ToList();
+
+                    // Open doors.
+                    doors.ForEach((a) => SetVehicleDoorOpen(a.Vehicle.Handle, (int)a.Index, false, false));
+
+                    // Remove doors.
+                    doors.ForEach((a) => a.Break(false));
+
+                    int stoppedTimer = GetGameTimer();
+                    while (GetGameTimer() - stoppedTimer < (20 * 1000))
+                    {
+                        // keep doors that are on the wrong side of the platform closed while the train is stopped.
+                        doorsToClose.ForEach(d => d.Close(true));
+                        await Delay(0);
+                    }
+
+                    // Restore (fix and close) the doors by fixing the train.
+                    SetVehicleFixed(train);
+                    SetVehicleFixed(trainCarriage);
+
                 }
-            }
 
-            stoppingTrains.Remove(train);
+                SetTrainCruiseSpeed(train, 8f);
 
-            while (!stoppingTrains.Contains(train))
-            {
-                await Delay(0);
+                int timer = GetGameTimer();
 
-                if (mainTrain != null && cariageTrain != null)
+                while (GetGameTimer() - timer < 10000)
                 {
-                    var doors = mainTrain.Doors.GetAll().ToList();
-                    doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+                    await Delay(0);
 
-                    doors.ForEach(d => d.Close(true));
+                    if (mainTrain != null && cariageTrain != null)
+                    {
+                        var doors = mainTrain.Doors.GetAll().ToList();
+                        doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+                        doors.ForEach(d => d.Close(true));
+                    }
+                }
+
+                stoppingTrains.Remove(train);
+
+                while (!stoppingTrains.Contains(train))
+                {
+                    await Delay(0);
+
+                    if (mainTrain != null && cariageTrain != null)
+                    {
+                        var doors = mainTrain.Doors.GetAll().ToList();
+                        doors.AddRange(cariageTrain.Doors.GetAll().ToList());
+                        doors.ForEach(d => d.Close(true));
+                    }
                 }
             }
-
-
         }
 
         /// <summary>
         /// sets or creates trains
         /// </summary>
         /// <param name="netHandles"></param>
-        private async void SetTrain(List<dynamic> netHandles)
+        private async void SetTrain()
         {
             if (!justSetup)
             {
@@ -219,76 +244,6 @@ namespace TrainsClient
                     }
                 }
 
-                foreach (var nh in netHandles)
-                {
-                    if (NetworkDoesNetworkIdExist((int)nh))
-                    {
-                        TrainHandles.Add(NetToVeh((int)nh));
-                    }
-                }
-
-
-                //{
-                List<int> vehicles = new List<int>();
-                int entity = 0;
-                int handle = FindFirstVehicle(ref entity);
-                if (DoesEntityExist(entity))
-                {
-                    vehicles.Add(entity);
-                    while (true)
-                    {
-                        if (FindNextVehicle(handle, ref entity))
-                        {
-                            if (DoesEntityExist(entity))
-                            {
-                                vehicles.Add(entity);
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                }
-                EndFindVehicle(handle);
-
-                List<int> existingTrains = new List<int>();
-                foreach (int veh in vehicles)
-                {
-                    if (IsThisModelATrain((uint)GetEntityModel(veh)) && (IsVehicleModel(veh, (uint)GetHashKey("FREIGHT")) || IsVehicleModel(veh, (uint)GetHashKey("METROTRAIN"))))
-                    {
-                        //if (existingTrains.Count < 3)
-                        //{
-                        existingTrains.Add(veh);
-                        //}
-                        //else
-                        //{
-                        //    int ripTrain = veh;
-                        //    DeleteMissionTrain(ref ripTrain);
-                        //}
-                    }
-                }
-                int count = TrainHandles.Where(t => DoesEntityExist(t)).Count();
-
-                if (count < existingTrains.Count)
-                {
-                    TrainHandles = existingTrains;
-                    //int i = 0;
-                    //foreach (int train in existingTrains)
-                    //{
-                    //    Debug.WriteLine(i.ToString());
-                    //    TrainHandles[i] = train;
-                    //    i++;
-                    //}
-                }
-
-                //speedv
-                //SetRandomTrains(false);
-                //DeleteAllTrains();
                 if (NetworkIsHost())
                 {
                     bool direction = new Random().Next(0, 1) == 1;
@@ -299,62 +254,77 @@ namespace TrainsClient
                         new Vector3(1010f, 3218f, 40f),
                         new Vector3(665f, -729f, 24f),
                         //new Vector3(-594f, -1391f, 21f),
-                        new Vector3(40.2f, -1201.3f, 31.0f),
+                        //new Vector3(40.2f, -1201.3f, 31.0f),
+
+                        new Vector3(-1081.309f, -2725.259f, -7.137033f),
+
+                        new Vector3(-536.8082f, -1286.096f, 27.08768f),
+
+                        new Vector3(-302.6719f, -322.9958f, 10.33629f),
+
+                        new Vector3(-1341.085f, -467.674f, 15.31838f),
+
+                        new Vector3(-209.6845f, -1037.544f, 30.50939f),
                     };
 
-                    for (var i = 0; i < 4; i++)
+                    for (var i = 0; i < coords.Count; i++)
                     {
-                        if ((TrainHandles.Count > i && !DoesEntityExist(TrainHandles[i])) || (TrainHandles.Count <= i))
+                        if ((TrainHandles.Count > i && !DoesEntityExist(TrainHandles[i])) || (!(TrainHandles.Count > i)))
                         {
-                            if (i == 3)
+                            if (i > 2)
                             {
-                                TrainHandles[i] = CreateMissionTrain(24, coords[i].X, coords[i].Y, coords[i].Z, true);
+                                CreateMissionTrain(24, coords[i].X, coords[i].Y, coords[i].Z, true);
                             }
                             else
                             {
-                                TrainHandles[i] = CreateMissionTrain(new Random().Next(2, 15), coords[i].X, coords[i].Y, coords[i].Z, direction);
+                                CreateMissionTrain(new Random().Next(2, 15), coords[i].X, coords[i].Y, coords[i].Z, direction);
                             }
                             Debug.WriteLine($"Train {i} id: {TrainHandles[i]}");
                         }
 
-                        //N_0x2b6747faa9db9d6b(TrainHandles[i], true);
-                        var ped = GetPedInVehicleSeat(TrainHandles[i], -1);
+                    }
+
+                    foreach (int t in TrainHandles)
+                    {
+                        SetVehicleFixed(t);
+
+                        var ped = GetPedInVehicleSeat(t, -1);
+
                         if (DoesEntityExist(ped))
                         {
-                            DeletePed(ref ped);
+                            // only delete the ped if it's not any player's ped to prevent game crashing.
+                            if (!(Players.Any(p => p.Character.Handle == ped)))
+                            {
+                                DeletePed(ref ped);
+                            }
                         }
-                        var newped = CreatePedInsideVehicle(TrainHandles[i], 26, (uint)GetHashKey("s_m_m_lsmetro_01"), -1, true, true);
-                        //if (IsVehicleModel(TrainHandles[i], (uint)GetHashKey("METROTRAIN")))
-                        //{
-                        //    TaskVehicleDriveWander(newped, TrainHandles[i], 8f, 786603);
-                        //}
-                        //SetVehicleSt(TrainHandles[i], true);
-                        SetVehicleFixed(TrainHandles[i]);
-                        //CitizenFX.Core.Native.Function.Call((CitizenFX.Core.Native.Hash)0xE861D0B05C7662B8, newped, 1, 1);
+
+                        var newped = CreatePedInsideVehicle(t, 26, (uint)GetHashKey("s_m_m_lsmetro_01"), -1, true, true);
+
                         SetPedDefaultComponentVariation(newped);
                         ClearPedDecorations(newped);
-
-
-
-
-                        //N_0xe861d0b05c7662b8(newped, 0, 0);
-                        //}
+                        ClearAllPedProps(newped);
+                        SetPedCanBeDraggedOut(newped, false);
+                        SetPedCanBeShotInVehicle(newped, false);
                     }
 
-                    List<int> trainNetHandles = new List<int>();
-                    foreach (int tHandle in TrainHandles)
-                    {
-                        trainNetHandles.Add(VehToNet(tHandle));
-                    }
-                    TriggerServerEvent(GetCurrentResourceName() + ":SetTrainNetHandle", trainNetHandles);
+                    TriggerServerEvent(GetCurrentResourceName() + ":SetTrainNetHandle");
                 }
-                //}
 
-                foreach (int TrainHandle in TrainHandles)
+                if (CreateBlips)
                 {
-                    if (DoesEntityExist(TrainHandle) && GetEntitySpeedVector(TrainHandle, true).Y > -1f)
+                    foreach (int TrainHandle in TrainHandles)
                     {
-                        int blip = AddBlipForEntity(TrainHandle);
+                        int blip = 0;
+
+                        if (DoesEntityExist(TrainHandle) && !DoesBlipExist(GetBlipFromEntity(TrainHandle)))
+                        {
+                            blip = AddBlipForEntity(TrainHandle);
+                        }
+                        else
+                        {
+                            blip = GetBlipFromEntity(TrainHandle);
+                        }
 
                         SetBlipAsShortRange(blip, true);
                         ShowHeadingIndicatorOnBlip(blip, true);
@@ -366,27 +336,16 @@ namespace TrainsClient
                     }
                 }
 
-
-
                 foreach (string t in TrainModels)
                 {
                     SetModelAsNoLongerNeeded((uint)GetHashKey(t));
                 }
+
                 justSetup = true;
             }
             else
             {
                 justSetup = false;
-            }
-        }
-
-        private void Spawn()
-        {
-            if (!hasSpawned)
-            {
-                hasSpawned = true;
-
-                TriggerServerEvent(GetCurrentResourceName() + ":RequestTrainNetworkHandle");
             }
         }
     }

@@ -10,14 +10,16 @@ namespace TrainsServer
 {
     public class Main : BaseScript
     {
-        private List<int> TrainNetworkHandles { get; set; } = new List<int>() { 0, 0, 0, 0 };
+        //private List<int> TrainNetworkHandles { get; set; } = new List<int>() { 0, 0, 0, 0 };
 
         /// <summary>
         /// Constructor, adds 2 event handlers.
         /// </summary>
         public Main()
         {
-            EventHandlers.Add(GetCurrentResourceName() + ":SetTrainNetHandle", new Action<Player, List<dynamic>>(SetTrain));
+            //EventHandlers.Add(GetCurrentResourceName() + ":SetTrainNetHandle", new Action<Player, List<dynamic>>(SetTrain));
+            //EventHandlers.Add(GetCurrentResourceName() + ":RequestTrainNetworkHandle", new Action<Player>(GetTrain));
+            EventHandlers.Add(GetCurrentResourceName() + ":SetTrainNetHandle", new Action<Player>(SetTrain));
             EventHandlers.Add(GetCurrentResourceName() + ":RequestTrainNetworkHandle", new Action<Player>(GetTrain));
         }
 
@@ -26,19 +28,20 @@ namespace TrainsServer
         /// </summary>
         /// <param name="source"></param>
         /// <param name="netHandle"></param>
-        private void SetTrain([FromSource]Player source, List<dynamic> handles)
+        //private void SetTrain([FromSource]Player source, List<dynamic> handles)
+        private void SetTrain([FromSource]Player source)
         {
             if (GetHostId() == source.Handle)
             {
-                TrainNetworkHandles.Clear();
-                foreach (var h in handles)
-                {
-                    TrainNetworkHandles.Add((int)h);
-                }
+                //TrainNetworkHandles.Clear();
+                //foreach (var h in handles)
+                //{
+                //    TrainNetworkHandles.Add((int)h);
+                //}
                 //TrainNetworkHandle1 = netHandle1;
                 //TrainNetworkHandle2 = netHandle2;
                 //TrainNetworkHandle3 = netHandle3;
-                TriggerClientEvent(GetCurrentResourceName() + ":GetTrainNetworkHandle", TrainNetworkHandles);
+                TriggerClientEvent(GetCurrentResourceName() + ":GetTrainNetworkHandle");
                 //Debug.WriteLine($"Setting the train handle received from {source.Name}^7 to: {TrainNetworkHandle1}, {TrainNetworkHandle2}, {TrainNetworkHandle3}");
             }
         }
@@ -50,7 +53,8 @@ namespace TrainsServer
         private void GetTrain([FromSource] Player source)
         {
             //Debug.WriteLine($"Sending {source.Name}^7 the train handle: {TrainNetworkHandle1}, {TrainNetworkHandle2}, {TrainNetworkHandle3}");
-            source.TriggerEvent(GetCurrentResourceName() + ":GetTrainNetworkHandle", TrainNetworkHandles);
+            //source.TriggerEvent(GetCurrentResourceName() + ":GetTrainNetworkHandle", TrainNetworkHandles);
+            source.TriggerEvent(GetCurrentResourceName() + ":GetTrainNetworkHandle");
         }
     }
 }
